@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Logs / scratch (but KEEP the demo cache: data_cache/cse.db + parquet/)
+data_cache/*.log
+data_cache/build_cache.out
+*.out
+
+# Machine-local Claude Code settings (keep shared .claude/settings.json if added)
+.claude/settings.local.json

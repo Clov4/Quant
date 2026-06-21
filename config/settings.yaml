@@ -1,0 +1,100 @@
+# =============================================================================
+# csequant configuration — Casablanca Stock Exchange (CSE) quant system
+# Everything that a strategy/risk/cost model needs lives here, not in code.
+# =============================================================================
+
+currency: MAD
+
+data:
+  # Order in which the DataService tries providers. The first that returns
+  # data for a ticker wins; the result is always written back to the cache.
+  #   offline    -> local SQLite/parquet cache (works with no network)
+  #   casablanca -> live scrape of casablanca-bourse.com (real EOD data)
+  #   tvdatafeed -> optional unofficial TradingView feed (off by default)
+  source_priority: [offline, casablanca]
+  cache_db: data_cache/cse.db
+  parquet_dir: data_cache/parquet
+  request_timeout: 30
+  # casablanca-bourse.com presents a certificate chain that many environments
+  # cannot verify. Disable verification (documented fragility) to fetch data.
+  verify_tls: false
+  rate_limit_sleep: 0.3        # seconds between paged requests (be polite)
+  history_start: '2021-01-01'  # earliest date to fetch when building the cache
+  stale_after_days: 5          # snapshot older than this is flagged stale in the GUI
+
+universe:
+  instruments_csv: config/instruments.csv   # 113 CSE instruments + sectors (real)
+  indices_csv: config/indices.csv           # MASI / MASI 20 / sector indices (real)
+  benchmark: CSE-COMPOSITE                   # cap-weighted proxy reconstructed from the cache
+  # Liquid subset shipped in the demo cache. The *full* universe is available
+  # in instruments_csv; widen `demo_tickers` and rebuild the cache to cover more.
+  demo_tickers:
+    [ATW, IAM, BCP, BOA, CIH, BCI, CSR, LBV, GAZ, MNG, TQM, CMA, SID, ADH, LES, TMA, SAH, HPS]
+
+market:
+  settlement_days: 2          # Casablanca settles T+2 (verify; historically T+3)
+  default_lot_size: 1         # central market trades whole shares; no fractionals
+  trading_days_per_year: 252
+
+# Transaction-cost assumptions for CSE brokers. These are configurable defaults,
+# NOT official tariffs — tune to your broker. See backtest/costs.py.
+costs:
+  commission_rate: 0.0100     # broker commission (~1.00% round-turn side)
+  commission_min: 0.0         # MAD floor per trade
+  exchange_fee_rate: 0.0010   # Bourse de Casablanca commission (~0.10%)
+  regulatory_fee_rate: 0.0002 # AMMC regulatory fee
+  vat_rate: 0.10              # TVA applied on commissions+fees (10% in Morocco)
+  slippage_bps: 15            # half-spread / market-impact slippage (basis points)
+  liquidity_adv_frac: 0.10    # max fraction of trailing avg daily turnover tradable/day
+
+# Risk profiles map the user's risk tolerance Y to optimizer constraints.
+risk_profiles:
+  Conservative:
+    method: risk_parity       # equal risk contribution
+    risk_aversion: 12.0
+    target_vol: 0.08
+    max_weight: 0.15
+    max_sector_weight: 0.30
+    min_cash: 0.30
+  Balanced:
+    method: mean_variance
+    risk_aversion: 5.0
+    target_vol: 0.14
+    max_weight: 0.25
+    max_sector_weight: 0.45
+    min_cash: 0.10
+  Aggressive:
+    method: mean_variance
+    risk_aversion: 1.5
+    target_vol: 0.22
+    max_weight: 0.40
+    max_sector_weight: 0.60
+    min_cash: 0.0
+
+strategies:
+  momentum:
+    fast_ma: 20
+    slow_ma: 50
+    momentum_lookback: 90
+    momentum_threshold: 0.0
+  mean_reversion:
+    rsi_period: 14
+    rsi_oversold: 30.0
+    rsi_overbought: 70.0
+    zscore_window: 20
+    zscore_entry: -1.5
+    zscore_exit: 0.0
+  factor_model:
+    momentum_lookback: 120
+    vol_window: 60
+    top_n: 10
+
+backtest:
+  initial_capital: 100000     # MAD
+  rebalance: W-FRI            # signal re-evaluation cadence (W-* weekly, M monthly, D daily)
+  warmup_days: 60             # bars reserved to warm up indicators
+  max_position_weight: 0.30   # per-name cap when sizing the strategy sleeve
+
+logging:
+  level: INFO
+  file: data_cache/csequant.log

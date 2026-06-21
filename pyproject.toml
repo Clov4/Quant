@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "csequant"
+version = "0.1.0"
+description = "Quant research & decision-support system for the Casablanca Stock Exchange (CSE)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-learn>=1.3",
+    "pyarrow>=12.0",
+    "SQLAlchemy>=2.0",
+    "requests>=2.28",
+    "beautifulsoup4>=4.11",
+    "lxml>=4.9",
+    "PyYAML>=6.0",
+    "streamlit>=1.30",
+    "plotly>=5.15",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+csequant = "csequant.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["csequant*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
