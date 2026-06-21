@@ -23,6 +23,21 @@ from .logging_conf import setup_logging
 from .risk import PortfolioOptimizer
 
 
+def _print_backtest_table(strat_metrics: dict) -> None:
+    rows = []
+    for name, m in strat_metrics.items():
+        rows.append({
+            "strategy": name, "CAGR": f"{m['cagr']*100:.1f}%",
+            "vol": f"{m['ann_vol']*100:.1f}%", "Sharpe": f"{m['sharpe']:.2f}",
+            "maxDD": f"{m['max_drawdown']*100:.1f}%", "win%": f"{m['win_rate']*100:.0f}%",
+            "trades": m["n_round_trips"], "turn": f"{m['annual_turnover']:.1f}x",
+            "vsBench": f"{m.get('excess_cagr', 0)*100:+.1f}%",
+        })
+    print(pd.DataFrame(rows).to_string(index=False))
+    bench_cagr = next(iter(strat_metrics.values())).get("benchmark_cagr", 0) * 100
+    print(f"\nBenchmark (buy & hold) CAGR: {bench_cagr:.1f}%")
+
+
 def main(argv: list[str] | None = None) -> int:
     cfg = load_config()
     setup_logging(cfg.get("logging.level", "INFO"), cfg.path("logging.file"))
@@ -40,6 +55,11 @@ def main(argv: list[str] | None = None) -> int:
     p_sig.add_argument("--ticker")
 
     sub.add_parser("backtest", help="metrics table vs benchmark")
+
+    p_win = sub.add_parser("backtest-window",
+                           help="backtest metrics over a date sub-window (regime test)")
+    p_win.add_argument("--start", required=True)
+    p_win.add_argument("--end", required=True)
 
     p_rep = sub.add_parser("report", help="write markdown backtest report")
     p_rep.add_argument("--out")
@@ -67,19 +87,14 @@ def main(argv: list[str] | None = None) -> int:
 
     elif args.cmd == "backtest":
         res = pipeline.run_all_backtests(cfg)
-        rows = []
-        for name, r in res["strategies"].items():
-            m = r.metrics
-            rows.append({
-                "strategy": name, "CAGR": f"{m['cagr']*100:.1f}%",
-                "vol": f"{m['ann_vol']*100:.1f}%", "Sharpe": f"{m['sharpe']:.2f}",
-                "maxDD": f"{m['max_drawdown']*100:.1f}%", "win%": f"{m['win_rate']*100:.0f}%",
-                "trades": m["n_round_trips"], "turn": f"{m['annual_turnover']:.1f}x",
-                "vsBench": f"{m.get('excess_cagr', 0)*100:+.1f}%",
-            })
-        bm = next(iter(res["strategies"].values())).metrics.get("benchmark_cagr", 0) * 100
-        print(pd.DataFrame(rows).to_string(index=False))
-        print(f"\nBenchmark (buy & hold) CAGR: {bm:.1f}%")
+        _print_backtest_table({name: r.metrics for name, r in res["strategies"].items()})
+
+    elif args.cmd == "backtest-window":
+        res = pipeline.run_backtest_window(cfg, args.start, args.end)
+        n = len(next(iter(res["strategies"].values()))["equity"])
+        print(f"Backtest window {args.start} → {args.end}  ({n} trading days, "
+              f"indicators warmed up on prior history)\n")
+        _print_backtest_table({name: d["metrics"] for name, d in res["strategies"].items()})
 
     elif args.cmd == "report":
         path = pipeline.write_backtest_report(cfg, args.out)

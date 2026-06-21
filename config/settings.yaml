@@ -71,6 +71,16 @@ risk_profiles:
     max_sector_weight: 0.60
     min_cash: 0.0
 
+# Portfolio-optimizer knobs that are not per-profile.
+optimizer:
+  # Shrinkage of expected returns toward the cross-sectional mean, in [0, 1]:
+  #   0   = raw historical mean (no shrink)
+  #   0.5 = halfway to the mean  (the original, default behaviour)
+  #   1   = fully collapsed to the mean (returns carry no cross-sectional info)
+  # Lower it when you believe future returns won't resemble the (here, bullish)
+  # past — e.g. around a regime change.
+  returns_shrink: 0.5
+
 strategies:
   momentum:
     fast_ma: 20
@@ -83,7 +93,10 @@ strategies:
     rsi_overbought: 70.0
     zscore_window: 20
     zscore_entry: -1.5
-    zscore_exit: 0.0
+    zscore_exit: 1.0            # exit once reversion overshoots the mean (was 0.0)
+    regime_ma: 200             # long-trend MA for the regime filter
+    regime_max_premium: 0.10   # don't enter if price > MA200 * (1 + 0.10)
+    regime_filter: true        # block entries during euphoric uptrends
   factor_model:
     momentum_lookback: 120
     vol_window: 60

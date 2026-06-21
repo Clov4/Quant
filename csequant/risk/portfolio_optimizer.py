@@ -127,14 +127,21 @@ class PortfolioOptimizer:
         if method == "risk_parity":
             w = self._risk_parity(Sigma_c, max_w, budget)
             w = self._apply_sector_caps(w, sector_map, max_sector)
+            # risk-parity ignores returns, so scale the whole sleeve to target vol.
+            w, vol_scale = self._apply_vol_target(w, Sigma_c, target_vol)
         elif method == "rule_based":
             w = self._rule_based(cand, max_w, sector_map, max_sector, budget)
+            w, vol_scale = self._apply_vol_target(w, Sigma_c, target_vol)
         else:
             method = "mean_variance"
-            w = self._mean_variance(mu_c, Sigma_c, lam, max_w, sector_map, max_sector, budget)
+            # Markowitz with the volatility cap enforced *inside* the program, so the
+            # result is the mean-variance optimum at the target vol — not an
+            # optimal-then-rescaled approximation (the post-hoc scaling broke
+            # optimality). No separate vol-target step for this branch.
+            w = self._mean_variance(mu_c, Sigma_c, lam, max_w, sector_map,
+                                    max_sector, budget, target_vol)
+            vol_scale = 1.0
 
-        # volatility targeting -> the rest becomes a cash buffer
-        w, vol_scale = self._apply_vol_target(w, Sigma_c, target_vol)
         if vol_scale < 0.999:
             notes.append(f"Scaled exposure to {vol_scale*100:.0f}% to meet the "
                          f"{target_vol*100:.0f}% target volatility ({risk_tolerance}).")
@@ -205,7 +212,12 @@ class PortfolioOptimizer:
             return pd.Series(dtype=float), pd.DataFrame(), px.iloc[-1], R
         mu = R.mean() * self.ppy
         grand = mu.mean()
-        mu = grand + 0.5 * (mu - grand)   # 50% shrink toward the cross-sectional mean
+        # Shrink expected returns toward the cross-sectional mean. `returns_shrink`
+        # in [0, 1] is the *amount* shrunk: we keep (1 - shrink) of each name's
+        # deviation from the mean. shrink=0.5 reproduces the original behaviour;
+        # shrink=0 uses raw historical means, shrink=1 collapses to the mean.
+        shrink = float(self.cfg.get("optimizer.returns_shrink", 0.5))
+        mu = grand + (1.0 - shrink) * (mu - grand)
         lw = LedoitWolf().fit(R.values)
         Sigma = pd.DataFrame(lw.covariance_ * self.ppy, index=R.columns, columns=R.columns)
         return mu, Sigma, px.iloc[-1], R
@@ -243,19 +255,29 @@ class PortfolioOptimizer:
         return list(cands), reasons
 
     # -- optimizers --------------------------------------------------------
-    def _mean_variance(self, mu, Sigma, lam, max_w, sector_map, max_sector, budget):
+    def _mean_variance(self, mu, Sigma, lam, max_w, sector_map, max_sector, budget, target_vol):
         idx = list(mu.index)
         m, S = mu.values, Sigma.values
 
         def neg_util(w):
             return -(m @ w - 0.5 * lam * w @ S @ w)
 
-        cons = [{"type": "eq", "fun": lambda w: w.sum() - budget}]
+        # Inequality budget (cash is allowed) + the variance cap target_vol^2 mean
+        # the program is always feasible (w=0 gives zero vol) and the optimizer holds
+        # cash exactly as far as the vol cap and risk aversion require.
+        cons = [{"type": "ineq", "fun": lambda w: budget - w.sum()},
+                {"type": "ineq", "fun": lambda w: target_vol ** 2 - w @ S @ w}]
         for sec in set(sector_map.values()):
             mask = np.array([1.0 if sector_map[t] == sec else 0.0 for t in idx])
             cons.append({"type": "ineq", "fun": lambda w, mk=mask: max_sector - w @ mk})
         bounds = [(0.0, max_w)] * len(idx)
+
+        # Warm start that already satisfies the vol cap (scale the uniform sleeve down).
         w0 = np.full(len(idx), budget / len(idx))
+        v0 = float(np.sqrt(w0 @ S @ w0))
+        if v0 > target_vol and v0 > 0:
+            w0 = w0 * (target_vol / v0)
+
         res = minimize(neg_util, w0, method="SLSQP", bounds=bounds, constraints=cons,
                        options={"maxiter": 500, "ftol": 1e-9})
         w = pd.Series(np.clip(res.x, 0, None), index=idx)

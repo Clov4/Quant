@@ -79,6 +79,37 @@ def run_all_backtests(cfg: Config, prices: dict[str, pd.DataFrame] | None = None
     return out
 
 
+def run_backtest_window(cfg: Config, start: str | None, end: str | None,
+                        prices: dict[str, pd.DataFrame] | None = None) -> dict:
+    """Evaluate the strategies over a sub-window [start, end] for regime comparison.
+
+    The engine still runs over the *full* history (so indicators are warmed up with
+    the real prior data you'd have had at `start` — no look-ahead), then the equity
+    curve, trades, and benchmark are sliced to the window and metrics recomputed.
+    This reuses the engine and metrics; no separate backtest logic.
+    """
+    full = run_all_backtests(cfg, prices)
+    ppy = int(cfg.get("market.trading_days_per_year", 252))
+    s = pd.Timestamp(start) if start else None
+    e = pd.Timestamp(end) if end else None
+    bench_w = full["benchmark"].loc[s:e]
+
+    out = {"benchmark": bench_w, "strategies": {}, "window": (start, end)}
+    for name, res in full["strategies"].items():
+        eq = res.equity.loc[s:e]
+        tr = res.trades
+        if not tr.empty:
+            td = pd.to_datetime(tr["date"])
+            if s is not None:
+                tr = tr[td >= s]
+            if e is not None:
+                tr = tr[pd.to_datetime(tr["date"]) <= e]
+        out["strategies"][name] = {
+            "equity": eq, "trades": tr, "metrics": M.summary(eq, tr, ppy, bench_w),
+        }
+    return out
+
+
 # --- report -----------------------------------------------------------------
 def write_backtest_report(cfg: Config, out_path: str | Path | None = None) -> Path:
     results = run_all_backtests(cfg)

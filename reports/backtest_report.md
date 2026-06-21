@@ -9,7 +9,7 @@ Universe: ADH, ATW, BCI, BCP, BOA, CIH, CMA, CSR, GAZ, HPS, IAM, LBV, LES, MNG, 
 | Strategy | CAGR | Vol | Sharpe | Sortino | MaxDD | Calmar | Win% | Trades | Turnover | vs Bench |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
 | factor_model | 4.0% | 13.5% | 0.36 | 0.42 | -19.5% | 0.20 | 45.2% | 502 | 7.5x | -20.3% |
-| mean_reversion | -26.9% | 13.4% | -2.27 | -2.88 | -61.0% | -0.44 | 21.8% | 523 | 26.2x | -51.1% |
+| mean_reversion | -17.9% | 12.1% | -1.57 | -1.90 | -45.2% | -0.40 | 24.6% | 500 | 16.0x | -42.1% |
 | momentum | -1.9% | 15.1% | -0.05 | -0.06 | -25.9% | -0.07 | 38.1% | 628 | 13.4x | -26.1% |
 | **Benchmark (buy&hold)** | 24.2% | 16.4% | 1.41 | 1.89 | -18.6% | 1.30 | — | — | — | — |
 
@@ -35,20 +35,20 @@ Most recent trades:
 
 ### mean_reversion
 
-- Total return: -59.9% (benchmark 88.6%)
-- Beta to benchmark: 0.46, correlation 0.57
-- Round-trip trades: 523, win rate 21.8%, avg trade -2.7%
+- Total return: -43.9% (benchmark 88.6%)
+- Beta to benchmark: 0.45, correlation 0.61
+- Round-trip trades: 500, win rate 24.6%, avg trade -2.9%
 
 Most recent trades:
 
 ```
       date ticker side  shares     price   gross  fees                    reason
-2026-06-19    SAH SELL       1 3065.3950 3065.39 37.77 exit / trim toward target
-2026-06-19    SID SELL       1 1958.0585 1958.06 24.12 exit / trim toward target
-2026-06-19    TQM SELL       1 1782.3225 1782.32 21.96 exit / trim toward target
-2026-06-19    BOA  BUY      25  192.2880 4807.20 59.22 enter / add toward target
-2026-06-19    CIH  BUY      14  349.7238 4896.13 60.32 enter / add toward target
-2026-06-19    LES  BUY       4  345.5175 1382.07 17.03 enter / add toward target
+2026-06-19    HPS SELL       6  619.0700 3714.42 45.76 exit / trim toward target
+2026-06-19    IAM SELL      43   92.5709 3980.55 49.04 exit / trim toward target
+2026-06-19    LBV SELL       1 3794.3000 3794.30 46.75 exit / trim toward target
+2026-06-19    TMA SELL       1 1534.6945 1534.69 18.91 exit / trim toward target
+2026-06-19    TQM SELL       2 1782.3225 3564.64 43.92 exit / trim toward target
+2026-06-19    BOA  BUY      35  192.2880 6730.08 82.91 enter / add toward target
 ```
 
 ### momentum

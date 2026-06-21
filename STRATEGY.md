@@ -44,10 +44,29 @@ entry and exit, not re-decided each bar).
 | `rsi_period` | 14 | Wilder RSI period |
 | `rsi_oversold` / `rsi_overbought` | 30 / 70 | RSI entry/exit bands |
 | `zscore_window` | 20 | rolling mean/σ window |
-| `zscore_entry` / `zscore_exit` | −1.5 / 0.0 | z-score entry/exit |
+| `zscore_entry` / `zscore_exit` | −1.5 / **1.0** | z-score entry / exit (exit overshoots the mean) |
+| `regime_ma` | 200 | long-trend MA for the regime filter |
+| `regime_max_premium` | 0.10 | block entries when price > MA200·(1 + 0.10) |
+| `regime_filter` | true | refuse to buy into euphoric uptrends |
 
-> *Example reason:* “BUY (mean_reversion): RSI(14) = 24.1, below the oversold
-> threshold of 30; price is 1.8σ below its 20-day mean.”
+**Two regime-aware fixes** (both causal — no look-ahead — and config-driven):
+
+- `zscore_exit = 1.0` (was 0.0): let the reversion *overshoot* the mean before
+  exiting, so the captured move covers the round-trip costs instead of selling
+  exactly at the mean and handing the edge back to fees.
+- the **regime filter** blocks an oversold entry while price is still far above its
+  200-day trend (fading a strong uptrend is the wrong bet). Blocked entries are
+  surfaced as explicit `NO ENTRY` signals, with reasoning.
+
+A/B on the cached window (equal cost) shows the effect: old (exit z≥0, no regime)
+→ delayed exit → +regime filter improves CAGR roughly −27% → −22% → −18%, cuts
+turnover ~26x → 16x, and reduces max drawdown ~−61% → −45%. It is **still a loser**
+on this bull window — the fixes limit the damage, they do not manufacture alpha.
+
+> *Example reasons:* “BUY (mean_reversion): RSI(14) = 24.1 …; price is 1.8σ below
+> its 20-day mean.” · “NO ENTRY (mean_reversion): RSI(14)=27.0 oversold AND price
+> 1.8σ below its 20-day mean, BUT price is +14% above its 200-day trend (max +10%)
+> → regime filter blocks the entry.”
 
 ### 1.3 Factor model (`factor_model`)
 Cross-sectional ranking of the universe by a composite score that rewards
@@ -116,14 +135,19 @@ Given capital **X** and risk tolerance **Y** (a named profile):
 1. **Candidates** come from the *same* strategy signals the engine uses (names
    currently held by the factor model / momentum), so the portfolio is explainable
    with the same reasoning.
-2. **Estimates:** annualised mean returns (shrunk 50% toward the cross-sectional
-   mean to reduce overfitting) and a **Ledoit-Wolf shrinkage** covariance.
+2. **Estimates:** annualised mean returns shrunk toward the cross-sectional mean
+   (`optimizer.returns_shrink`, default 0.5 = halfway; lower it toward 0 when you
+   expect the future not to resemble the past, e.g. around a regime change) and a
+   **Ledoit-Wolf shrinkage** covariance.
 3. **Method by profile:** mean-variance (SLSQP, risk-aversion from Y),
    risk-parity (equal risk contribution), or rule-based equal-weight.
 4. **Constraints:** per-name `max_weight`, per-sector `max_sector_weight`, and a
    `min_cash` budget.
-5. **Volatility targeting:** exposure is scaled so portfolio vol ≈ the profile's
-   `target_vol`; the remainder becomes a cash buffer.
+5. **Volatility targeting.** For **mean-variance** the target-vol cap is enforced
+   *inside* the SLSQP program (variance constraint `w'Σw ≤ target_vol²`, with an
+   inequality budget so cash is held as needed) — the result is the mean-variance
+   optimum **at** the target vol, not an optimal-then-rescaled approximation. For
+   risk-parity / rule-based, the sleeve is scaled to the target vol post-hoc.
 6. **Whole-share quantisation** for capital X (no fractional shares); reports
    expected return/vol, a 1-year range, historical max drawdown of the static
    allocation, per-position risk contribution, and a sector breakdown — each
@@ -145,21 +169,34 @@ demonstrably changes concentration, cash, and volatility.
 ## 5. Results (latest run) & how to read them
 
 From `reports/backtest_report.md` (window **2023-06-19 → 2026-06-19**, 18 names,
-weekly rebalance, T+2, net of all costs):
+weekly rebalance, T+2, net of all costs, **commission 1.0%** per `config`):
 
-| Strategy | CAGR | Sharpe | MaxDD | Win% | vs Benchmark |
-|---|--:|--:|--:|--:|--:|
-| factor_model | 9.8% | 0.75 | −16.1% | 50% | −14.5% |
-| momentum | 7.6% | 0.56 | −18.6% | 44% | −16.7% |
-| mean_reversion | −12.6% | −0.99 | −35.8% | 34% | −36.8% |
-| **Benchmark (buy & hold)** | **24.2%** | **1.41** | −18.6% | — | — |
+| Strategy | CAGR | Sharpe | MaxDD | Win% | Turnover | vs Benchmark |
+|---|--:|--:|--:|--:|--:|--:|
+| factor_model | 4.0% | 0.36 | −19.5% | 45% | 7.5x | −20.3% |
+| momentum | −1.9% | −0.05 | −25.9% | 38% | 13.4x | −26.1% |
+| mean_reversion | −17.9% | −1.57 | −45.2% | 25% | 16.0x | −42.1% |
+| **Benchmark (buy & hold)** | **24.2%** | **1.41** | −18.6% | — | — | — |
 
 **The strategies lag buy-and-hold — and that's an honest result, not a bug.** Over
 this ~3-year window the CSE was in a strong, fairly persistent bull market
 (benchmark +88.6% total, CAGR 24%). Timing strategies that sit in cash part of the
 time, pay costs on turnover, and cap position sizes structurally give up upside in
-such a regime (note their beta ≈ 0.5–0.7). Mean reversion fares worst because
-fading a steadily rising market is precisely the wrong bet here.
+such a regime (their beta ≈ 0.5–0.7). Mean reversion fares worst because fading a
+steadily rising market is the wrong bet here.
+
+**Cost sensitivity matters.** These numbers use a **1.0%** commission; at 0.4% the
+same strategies score materially higher (e.g. factor ≈ +10%, momentum ≈ +8%). The
+high-turnover names are the most cost-sensitive — tune `costs.commission_rate` to
+your broker before drawing conclusions. The mean-reversion fixes (delayed exit +
+regime filter) cut its turnover ~40% and its drawdown ~16pp at equal cost, which is
+exactly why they help even though the strategy stays negative here.
+
+**Re-testing a new regime.** Use `python -m csequant backtest-window --start … --end …`
+to evaluate the strategies on a sub-window (indicators are warmed up on prior
+history; metrics are recomputed on the window). On the stressed 2026-03→06 window
+the pattern repeats — the sharp relief rebound favours buy-and-hold, with momentum
+the most resilient of the three timing strategies.
 
 What the strategies *do* provide: lower beta and (for factor/momentum) shallower
 drawdowns than a single concentrated name, with fully explainable decisions. The

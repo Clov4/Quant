@@ -55,7 +55,7 @@ def render() -> None:
 
     st.markdown("#### Reasoning detail (most recent 15)")
     for _, r in f.head(15).iterrows():
-        icon = "🟢" if r["action"] == "BUY" else "🔴"
+        icon = {"BUY": "🟢", "SELL": "🔴"}.get(r["action"], "⚪")
         with st.expander(f"{icon} {r['date'].date()} · {r['action']} **{r['ticker']}** "
                          f"· {r['strategy']} · score {r['score']}"):
             st.write(r["reason"])

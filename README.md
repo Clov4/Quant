@@ -21,7 +21,8 @@ Streamlit dashboard.
 - **Explainable signals**: every signal records the exact indicator values that
   triggered it and renders them as a sentence — *no opaque "model says buy"*.
 - **Three strategies** behind one interface: momentum (MA-crossover + trend
-  filter), mean-reversion (RSI + z-score), and a cross-sectional factor model.
+  filter), mean-reversion (RSI + z-score, with a 200-day **regime filter** that
+  refuses to buy into euphoric uptrends), and a cross-sectional factor model.
 - **Realistic backtester**: whole-share orders, broker/exchange/AMMC fees + 10%
   VAT + slippage, a per-name daily liquidity cap from trailing turnover, and
   **T+2 settlement** cash mechanics. Walk-forward, no look-ahead.
@@ -85,6 +86,7 @@ button repopulates the cache when a network is available.
 python -m csequant build-cache                         # fetch + cache real EOD data
 python -m csequant signals --ticker IAM --limit 10     # signals with reasoning
 python -m csequant backtest                            # metrics vs benchmark
+python -m csequant backtest-window --start 2026-03-01 --end 2026-06-19   # regime sub-window
 python -m csequant report                              # -> reports/backtest_report.md
 python -m csequant recommend --capital 100000 --risk Balanced
 python -m csequant gui                                 # launch the dashboard

@@ -1,6 +1,7 @@
 """Plain-language explanations for every signal and portfolio allocation."""
 from .reasoning import (
     explain_allocation,
+    explain_blocked_entry,
     explain_no_signal,
     explain_signal,
     explain_stance,
@@ -8,4 +9,5 @@ from .reasoning import (
 
 __all__ = [
     "explain_signal", "explain_allocation", "explain_no_signal", "explain_stance",
+    "explain_blocked_entry",
 ]

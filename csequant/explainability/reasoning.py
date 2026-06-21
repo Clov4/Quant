@@ -86,6 +86,26 @@ def explain_no_signal(strategy: str, triggers: dict[str, Any]) -> str:
     return f"HOLD ({strategy}): {body}."
 
 
+def explain_blocked_entry(t: dict[str, Any]) -> str:
+    """Explain why the regime filter blocked an otherwise-valid mean-reversion entry.
+
+    e.g. "NO ENTRY (mean_reversion): RSI(14)=27.0 oversold AND price 1.8σ below its
+    20-day mean, BUT price is +14% above its 200-day trend (max +10%) → regime
+    filter blocks the entry."
+    """
+    parts: list[str] = []
+    if "rsi" in t:
+        parts.append(f"RSI({int(t.get('rsi_period', 14))})={t['rsi']:.1f} oversold")
+    if "zscore" in t:
+        parts.append(f"price {abs(t['zscore']):.1f}σ below its {int(t.get('z_window', 20))}-day mean")
+    cond = " AND ".join(parts) if parts else "entry conditions met"
+    prem = float(t.get("regime_premium", 0.0))
+    maxp = float(t.get("regime_max_premium", 0.0))
+    ma = int(t.get("regime_ma", 200))
+    return (f"NO ENTRY (mean_reversion): {cond}, BUT price is {prem * 100:+.0f}% above "
+            f"its {ma}-day trend (max {maxp * 100:+.0f}%) → regime filter blocks the entry.")
+
+
 def explain_stance(strategy: str, triggers: dict[str, Any]) -> str:
     """Describe a name's *current* favourable stance (used by the optimizer to say
     why a name is currently selected), from its latest indicator values."""
